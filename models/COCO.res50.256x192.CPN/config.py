@@ -1,10 +1,12 @@
+
+
 import os
 import os.path as osp
 import sys
 import numpy as np
 
 class Config:
-    username = 'default'
+    username = 'heatmap255'
 
     cur_dir = os.path.dirname(os.path.abspath(__file__))
     this_dir_name = cur_dir.split('/')[-1]
@@ -54,7 +56,8 @@ class Config:
     init_model = osp.join(root_dir, 'data', 'imagenet_weights', 'res50.ckpt')
 
     nr_skeleton = 17
-    img_path = os.path.join(root_dir, 'data', 'COCO', 'MSCOCO', 'images')
+    # img_path = os.path.join(root_dir, 'data', 'COCO', 'MSCOCO', 'images')
+    img_path= '/workdir/swh/dataset/coco/images'
     symmetry = [(1, 2), (3, 4), (5, 6), (7, 8), (9, 10), (11, 12), (13, 14), (15, 16)]
 
     imgExtXBorder = 0.1
@@ -77,7 +80,8 @@ class Config:
     gk9 = (9, 9)
     gk7 = (7, 7)
 
-    gt_path = osp.join(root_dir, 'data', 'COCO', 'MSCOCO', 'annotations', 'person_keypoints_minival2014.json')
+    # gt_path = osp.join(root_dir, 'data', 'COCO', 'MSCOCO', 'annotations', 'person_keypoints_minival2014.json')
+    gt_path=os.path.join('/workdir/swh/dataset/coco/annotations','person_keypoints_val2017.json')
     det_path = osp.join(root_dir, 'data', 'COCO', 'dets', 'person_detection_minival411_human553.json')
 
 cfg = Config()

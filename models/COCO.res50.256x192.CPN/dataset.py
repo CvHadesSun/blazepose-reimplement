@@ -153,7 +153,10 @@ def joints_heatmap_gen(data, label, tar_size=cfg.output_shape, ori_size=cfg.data
                 if return_valid:
                     valid[i][j] = 0.
                 continue
-            ret[i][j] /= am / 255
+            ret[i][j] /= am /255
+
+    # print(ret.max(),ret.min())
+    # print('-'*50)
     if return_valid:
         return ret, valid
     else:

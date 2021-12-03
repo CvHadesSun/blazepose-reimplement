@@ -171,38 +171,46 @@ def test_net(tester, logger, dets, det_range):
 def test(test_model, logger):
     eval_gt = COCO(cfg.gt_path)
     import json
-    with open(cfg.det_path, 'r') as f:
-        dets = json.load(f)
+    # with open(cfg.det_path, 'r') as f:
+    #     dets = json.load(f)
 
-    test_subset = False
-    if test_subset:
-        eval_gt.imgs = dict(list(eval_gt.imgs.items())[:100])
-        anns = dict()
-        for i in eval_gt.imgs:
-            for j in eval_gt.getAnnIds(i):
-                anns[j] = eval_gt.anns[j]
-        eval_gt.anns = anns
-    dets = [i for i in dets if i['image_id'] in eval_gt.imgs]
+    # test_subset = False
+    # if test_subset:
+    #     eval_gt.imgs = dict(list(eval_gt.imgs.items())[:100])
+    #     anns = dict()
+    #     for i in eval_gt.imgs:
+    #         for j in eval_gt.getAnnIds(i):
+    #             anns[j] = eval_gt.anns[j]
+    #     eval_gt.anns = anns
+    # dets = [i for i in dets if i['image_id'] in eval_gt.imgs]
 
-    dets = [i for i in dets if i['category_id'] == 1]
-    dets.sort(key=lambda x: (x['image_id'], x['score']), reverse=True)
-    for i in dets:
-        i['imgpath'] = 'val2014/COCO_val2014_000000%06d.jpg' % i['image_id']
-    img_num = len(np.unique([i['image_id'] for i in dets]))
+    # dets = [i for i in dets if i['category_id'] == 1]
+    # dets.sort(key=lambda x: (x['image_id'], x['score']), reverse=True)
+    # for i in dets:
+    #     i['imgpath'] = 'val2014/COCO_val2014_000000%06d.jpg' % i['image_id']
+    # img_num = len(np.unique([i['image_id'] for i in dets]))
 
-    use_gtboxes = False
+    use_gtboxes = True
     if use_gtboxes:
         d = COCOJoints()
         coco_train_data, coco_test_data = d.load_data()
         coco_test_data.sort(key=lambda x: x['imgid'])
         for i in coco_test_data:
+            print(i['imgpath'])
             i['image_id'] = i['imgid']
             i['score'] = 1.
+
+
         dets = coco_test_data
+        
+        # print('-'*50,img_num)
 
     from tfflat.mp_utils import MultiProc
     img_start = 0
     ranges = [0]
+    img_num = len(np.unique([i['image_id'] for i in dets]))
+    # img_num=100
+    print('-'*50,img_num)
     images_per_gpu = int(img_num / len(args.gpu_ids.split(','))) + 1
     for run_img in range(img_num):
         img_end = img_start + 1
