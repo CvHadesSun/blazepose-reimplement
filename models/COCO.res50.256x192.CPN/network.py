@@ -17,7 +17,9 @@ def create_global_net(blocks, is_training, trainable=True):
     global_outs = []
     last_fm = None
     initializer = tf.contrib.layers.xavier_initializer()
+    # print(len(blocks))
     for i, block in enumerate(reversed(blocks)):
+        # print(block.shape)
         with slim.arg_scope(resnet_arg_scope(bn_is_training=is_training)):
             lateral = slim.conv2d(block, 256, [1, 1],
                 trainable=trainable, weights_initializer=initializer,

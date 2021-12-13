@@ -41,6 +41,7 @@ main/*.jpg
 *.manifest
 *.spec
 
+models/COCO.res50.256x192.CPN/debug/
 # Installer logs
 pip-log.txt
 pip-delete-this-directory.txt

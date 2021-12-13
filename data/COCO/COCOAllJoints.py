@@ -1,7 +1,7 @@
 '''
 Author: your name
 Date: 2021-11-26 16:41:13
-LastEditTime: 2021-11-29 18:42:31
+LastEditTime: 2021-12-10 10:33:40
 LastEditors: Please set LastEditors
 Description: 打开koroFileHeader查看配置 进行设置: https://github.com/OBKoro1/koro1FileHeader/wiki/%E9%85%8D%E7%BD%AE
 FilePath: /tf-cpn/data/COCO/COCOAllJoints.py
@@ -50,6 +50,18 @@ class COCOJoints(object):
                         continue
                     joints = ann['keypoints']
                     bbox = ann['bbox']
+
+                    # >>to square the bbox
+                    x1,y1,w,h=bbox
+                    center_x=x1+w/2
+                    center_y=y1+h/2
+                    w= w if w>h else h
+                    h=w
+                    x1=center_x-w/2
+                    y1=center_y-h/2
+                    bbox=[x1,y1,w,h]
+                    # <<<
+
                     if np.sum(joints[2::3]) == 0 or ann['num_keypoints'] == 0 :
                         continue
                     # imgname = prefix + '2014/' + 'COCO_' + prefix + '2014' + '_' + str(ann['image_id']).zfill(12) + '.jpg'

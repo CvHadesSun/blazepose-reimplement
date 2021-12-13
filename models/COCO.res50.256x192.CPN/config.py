@@ -6,7 +6,7 @@ import sys
 import numpy as np
 
 class Config:
-    username = 'heatmap255'
+    username = 'square_bbox_heatmap255'
 
     cur_dir = os.path.dirname(os.path.abspath(__file__))
     this_dir_name = cur_dir.split('/')[-1]
@@ -17,6 +17,7 @@ class Config:
     # output path
     output_dir = os.path.join(root_dir, 'logs', username + '.' + this_dir_name)
     model_dump_dir = osp.join(output_dir, 'model_dump')
+    debug_dir = osp.join(output_dir, 'debug_vis')
 
     display = 1
 
@@ -40,6 +41,12 @@ class Config:
     gpu_ids = '0'
     nr_gpus = 1
     continue_train = False
+
+    flip_test=False
+
+
+    # add 
+    debug_vis=False
 
     def get_lr(self, itr):
         lr = self.lr * self.lr_gamma ** (itr // self.step_size)
@@ -71,8 +78,8 @@ class Config:
 
     pixel_means = np.array([[[102.9801, 115.9465, 122.7717]]]) # BGR
     pixel_norm = True
-    data_shape = (256, 192) #height, width
-    output_shape = (64, 48) #height, width
+    data_shape = (256, 256) #height, width
+    output_shape = (64, 64) #height, width
     gaussain_kernel = (7, 7)
     #
     gk15 = (15, 15)
@@ -94,3 +101,4 @@ add_pypath(osp.join(cfg.root_dir, 'data', 'COCO'))
 make_link(cfg.output_dir, './log')
 make_dir(cfg.output_dir)
 make_dir(cfg.model_dump_dir)
+make_dir(cfg.debug_dir)

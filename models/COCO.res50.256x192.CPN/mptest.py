@@ -22,6 +22,58 @@ from COCOAllJoints import COCOJoints
 from pycocotools.coco import COCO
 from pycocotools.cocoeval import COCOeval
 from pycocotools import mask as COCOmask
+from tqdm import tqdm
+
+
+
+# def BlendHeatmap(img,heatmaps,joint_num):
+#     '''data:original photo
+#     heatmaps: heatmap of all 19 joints(channels),Array shape(128,228,19)
+#     joint_num:heatmap of which joint(channel)to visualize'''
+    
+#     h_heatmap,w_heatmap,d_heatmap=heatmaps.shape
+    
+#     heatmap=heatmaps[:, :, joint_num]
+#     #resize
+#     scaled_img = cv2.resize(img, (w_heatmap, h_heatmap), interpolation=cv2.INTER_CUBIC)
+#     #blend resized image and heatmap
+#     plt.imshow(scaled_img,alpha=1)
+#     plt.imshow(heatmap,alpha=0.65)
+#     #add colorbar of the heatmap
+#     plt.colorbar(fraction=0.04,pad=0.03)
+
+# def heatmap_vis(img_f13,heatmaps_f13,size=[512,512]):
+
+#     heatmaps_f13=heatmaps_f13.resize(size)
+#     h_heatmap,w_heatmap,d_heatmap=heatmaps_f13.shape
+#     scaled_img = cv2.resize(img_f13, (w_heatmap, h_heatmap), interpolation=cv2.INTER_CUBIC)
+#     # plt.imshow(scaled_img,alpha=1)
+#     for i in range(0,19): 
+#         heatmap=heatmaps_f13[:, :, i]
+#         # plt.imshow(heatmap,alpha=0.05)
+#         x,y,c=FindJoint(heatmaps_f13,i)
+#         plt.plot(x,y,'r.',alpha=0.6)
+#     plt.savefig("Sitting 1_55011271_f13_19joints.png",dpi=300,bbox_inches='tight') 
+
+
+def heatmap_vis(img,heatmap,output_dir,name,target_size=[512,512]):
+
+    resize_heatmap = []
+    for map in heatmap:
+        map = cv2.resize(map, (target_size[1], target_size[0]), interpolation=cv2.INTER_CUBIC)
+        resize_heatmap.append(map)
+
+    img=cv2.resize(img, (target_size[1], target_size[0]), interpolation=cv2.INTER_CUBIC)
+ 
+    heatmap = np.asarray(resize_heatmap)
+    heatmap = np.sum(heatmap, axis=0)
+    heatmap = np.clip(heatmap, 0, 1)
+    image = np.asarray(img / 255.0, dtype=np.float32)
+    image[:, :, 0] = image[:, :, 0] + heatmap
+    image *=255
+    cv2.imwrite(os.path.join(output_dir,name),image)
+
+
 
 def test_net(tester, logger, dets, det_range):
     # here we assume all boxes are pre-processed.
@@ -36,25 +88,28 @@ def test_net(tester, logger, dets, det_range):
     start_time = time.time()
 
     img_start = det_range[0]
+
+    
+
     while img_start < det_range[1]:
         img_end = img_start + 1
         im_info = dets[img_start]
-        while img_end < det_range[1] and dets[img_end]['image_id'] == im_info['image_id']:
+        while img_end < det_range[1] and dets[img_end]['image_id'] == im_info['image_id']:  # some different instance of one image
             img_end += 1
 
-        test_data = dets[img_start:img_end]
-        img_start = img_end
+        test_data = dets[img_start:img_end]  # get the instances of one image
+        img_start = img_end   # assign the instance id to next.
 
         iter_avg_cost_time = (time.time() - start_time) / (img_end - det_range[0])
-        print('ran %.ds >> << left %.ds' % (
-            iter_avg_cost_time * (img_end - det_range[0]), iter_avg_cost_time * (det_range[1] - img_end)))
+        # print('ran %.ds >> << left %.ds' % (
+        #     iter_avg_cost_time * (img_end - det_range[0]), iter_avg_cost_time * (det_range[1] - img_end)))
 
         all_res.append([])
 
         # get box detections
-        cls_dets = np.zeros((len(test_data), 5), dtype=np.float32)
+        cls_dets = np.zeros((len(test_data), 5), dtype=np.float32)  # [N,5]:[bbox,score]
         for i in range(len(test_data)):
-            bbox = np.asarray(test_data[i]['bbox'])
+            bbox = np.asarray(test_data[i]['bbox'])  
             cls_dets[i, :4] = np.array([bbox[0], bbox[1], bbox[0] + bbox[2], bbox[1] + bbox[3]])
             cls_dets[i, 4] = np.array(test_data[i]['score'])
 
@@ -76,7 +131,7 @@ def test_net(tester, logger, dets, det_range):
             continue
 
         # crop and detect keypoints
-        cls_skeleton = np.zeros((len(test_data), cfg.nr_skeleton, 3))
+        cls_skeleton = np.zeros((len(test_data), cfg.nr_skeleton, 3)) # 2 instance
         crops = np.zeros((len(test_data), 4))
         cfg.batch_size = 32
         batch_size = cfg.batch_size // 2
@@ -87,35 +142,52 @@ def test_net(tester, logger, dets, det_range):
             test_imgs = []
             details = []
             for i in range(start_id, end_id):
-                test_img, detail = Preprocessing(test_data[i], stage='test')
-                test_imgs.append(test_img)
+                test_img, detail = Preprocessing(test_data[i], stage='test') #[1,3,256,256]
+                test_imgs.append(test_img) 
                 details.append(detail)
 
             details = np.asarray(details)
             feed = test_imgs
             for i in range(end_id - start_id):
-                ori_img = test_imgs[i][0].transpose(1, 2, 0)
-                flip_img = cv2.flip(ori_img, 1)
+                ori_img = test_imgs[i][0].transpose(1, 2, 0) #[256,256,3]
+                # cv2.imwrite('debug/{:04d}.jpg'.format(i),ori_img*255)
+                flip_img = cv2.flip(ori_img, 1)  # 水平翻转
                 feed.append(flip_img.transpose(2, 0, 1)[np.newaxis, ...])
-            feed = np.vstack(feed)
+            feed = np.vstack(feed) # [B,3,256,256]
 
             res = tester.predict_one([feed.transpose(0, 2, 3, 1).astype(np.float32)])[0]
-            res = res.transpose(0, 3, 1, 2)
+            res = res.transpose(0, 3, 1, 2)  # output heatmap :[B,k,h,w]
 
-            for i in range(end_id - start_id):
-                fmp = res[end_id - start_id + i].transpose((1, 2, 0))
-                fmp = cv2.flip(fmp, 1)
-                fmp = list(fmp.transpose((2, 0, 1)))
-                for (q, w) in cfg.symmetry:
-                    fmp[q], fmp[w] = fmp[w], fmp[q]
-                fmp = np.array(fmp)
-                res[i] += fmp
-                res[i] /= 2
+
+            # original_img=test_imgs[0][0].transpose(1, 2, 0)*255
+            # flip_img=feed.transpose(0, 2, 3, 1)[2]*255
+            # # flip_img = cv2.flip(original_img, 1)
+
+            # cv2.imwrite('./test.jpg',flip_img)
+
+
+            # flip test results:
+            if cfg.flip_test:
+                for i in range(end_id - start_id):
+                    fmp = res[end_id - start_id + i].transpose((1, 2, 0)) # get one prediction [h,w,k]
+                    fmp = cv2.flip(fmp, 1) # 水平翻转heatmap
+                    fmp = list(fmp.transpose((2, 0, 1))) # [k,h,w]
+                    for (q, w) in cfg.symmetry:  # 将对称关节点的heatmap交换
+                        fmp[q], fmp[w] = fmp[w], fmp[q]
+                    fmp = np.array(fmp)
+                    res[i] += fmp
+                    res[i] /= 2   # heatmap均值
+
 
             for test_image_id in range(start_id, end_id):
+                original_img=test_imgs[test_image_id - start_id][0].transpose(1, 2, 0)*255
+                
                 r0 = res[test_image_id - start_id].copy()
                 r0 /= 255.
                 r0 += 0.5
+                heatmap_vis(original_img,r0,'./debug/',"{:04d}.jpg".format(test_image_id))
+                # cv2.imwrite('debug/{:04d}.jpg'.format(test_image_id),original_img)
+
                 for w in range(cfg.nr_skeleton):
                     res[test_image_id - start_id, w] /= np.amax(res[test_image_id - start_id, w])
                 border = 10
@@ -142,6 +214,9 @@ def test_net(tester, logger, dets, det_range):
                     y = max(0, min(y, cfg.output_shape[0] - 1))
                     cls_skeleton[test_image_id, w, :2] = (x * 4 + 2, y * 4 + 2)
                     cls_skeleton[test_image_id, w, 2] = r0[w, int(round(y) + 1e-10), int(round(x) + 1e-10)]
+
+                # draw joints.
+                
                 # map back to original images
                 crops[test_image_id, :] = details[test_image_id - start_id, :]
                 for w in range(cfg.nr_skeleton):
@@ -149,6 +224,7 @@ def test_net(tester, logger, dets, det_range):
                     crops[test_image_id][2] - crops[test_image_id][0]) + crops[test_image_id][0]
                     cls_skeleton[test_image_id, w, 1] = cls_skeleton[test_image_id, w, 1] / cfg.data_shape[0] * (
                     crops[test_image_id][3] - crops[test_image_id][1]) + crops[test_image_id][1]
+        
         all_res[-1] = [cls_skeleton.copy(), cls_dets.copy()]
 
         cls_partsco = cls_skeleton[:, :, 2].copy().reshape(-1, cfg.nr_skeleton)
@@ -210,7 +286,7 @@ def test(test_model, logger):
     ranges = [0]
     img_num = len(np.unique([i['image_id'] for i in dets]))
     # img_num=100
-    print('-'*50,img_num)
+    # print('-'*50,img_num)
     images_per_gpu = int(img_num / len(args.gpu_ids.split(','))) + 1
     for run_img in range(img_num):
         img_end = img_start + 1

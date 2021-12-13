@@ -154,6 +154,7 @@ def joints_heatmap_gen(data, label, tar_size=cfg.output_shape, ori_size=cfg.data
                     valid[i][j] = 0.
                 continue
             ret[i][j] /= am /255
+            # ret[i][j] /= am
 
     # print(ret.max(),ret.min())
     # print('-'*50)
@@ -238,17 +239,27 @@ def Preprocessing(d, stage='train'):
         seg = cv2.resize(bimg[min_y:max_y, min_x:max_x], (width, height))
         segms.append(seg)
 
-    if vis:
+    if cfg.debug_vis:
         tmpimg = img.copy()
+        img_name=d['imgpath'].split('/')[-1]
         from utils.visualize import draw_skeleton
         draw_skeleton(tmpimg, label.astype(int))
-        cv2.imwrite('vis.jpg', tmpimg)
-        from IPython import embed; embed()
+        # print(os.path.join(cfg.debug_dir,img_name))
+        cv2.imwrite(os.path.join(cfg.debug_dir,img_name), tmpimg)
+        # print(os.path.join(cfg.debug_dir,img_name))
+        # from IPython import embed; embed()
 
-    img = img - cfg.pixel_means
+    # duplicate input img to debug visualization
+    # if cfg.debug_vis:
+    #     ori_img=img.copy()
+    #     print(ori_img.shape,d['imgpath'])
+    #     print('-'*50)
+        
+    # img = img - cfg.pixel_means
+
     if cfg.pixel_norm:
         img = img / 255.
-    img = img.transpose(2, 0, 1)
+    img = img.transpose(2, 0, 1)   # [3,256,256]
     imgs.append(img)
     if 'joints' in d:
         labels.append(label.reshape(-1))
