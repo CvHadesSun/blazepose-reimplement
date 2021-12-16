@@ -22,9 +22,9 @@ from COCOAllJoints import COCOJoints
 from pycocotools.coco import COCO
 from pycocotools.cocoeval import COCOeval
 from pycocotools import mask as COCOmask
-from tqdm import tqdm
+import tqdm
 
-
+from vis import vis_keypoints
 
 # def BlendHeatmap(img,heatmaps,joint_num):
 #     '''data:original photo
@@ -90,156 +90,166 @@ def test_net(tester, logger, dets, det_range):
     img_start = det_range[0]
 
     
+    with tqdm.tqdm(total=det_range[1], position=0, leave=True) as pbar:
+        while img_start < det_range[1]:
+            img_end = img_start + 1
+            im_info = dets[img_start]
+            while img_end < det_range[1] and dets[img_end]['image_id'] == im_info['image_id']:  # some different instance of one image
+                img_end += 1
 
-    while img_start < det_range[1]:
-        img_end = img_start + 1
-        im_info = dets[img_start]
-        while img_end < det_range[1] and dets[img_end]['image_id'] == im_info['image_id']:  # some different instance of one image
-            img_end += 1
+            test_data = dets[img_start:img_end]  # get the instances of one image
+            img_start = img_end   # assign the instance id to next.
 
-        test_data = dets[img_start:img_end]  # get the instances of one image
-        img_start = img_end   # assign the instance id to next.
+            iter_avg_cost_time = (time.time() - start_time) / (img_end - det_range[0])
+            # print('ran %.ds >> << left %.ds' % (
+            #     iter_avg_cost_time * (img_end - det_range[0]), iter_avg_cost_time * (det_range[1] - img_end)))
 
-        iter_avg_cost_time = (time.time() - start_time) / (img_end - det_range[0])
-        # print('ran %.ds >> << left %.ds' % (
-        #     iter_avg_cost_time * (img_end - det_range[0]), iter_avg_cost_time * (det_range[1] - img_end)))
+            all_res.append([])
 
-        all_res.append([])
+            # get box detections
+            cls_dets = np.zeros((len(test_data), 5), dtype=np.float32)  # [N,5]:[bbox,score]
+            for i in range(len(test_data)):
+                bbox = np.asarray(test_data[i]['bbox'])  
+                cls_dets[i, :4] = np.array([bbox[0], bbox[1], bbox[0] + bbox[2], bbox[1] + bbox[3]])
+                cls_dets[i, 4] = np.array(test_data[i]['score'])
 
-        # get box detections
-        cls_dets = np.zeros((len(test_data), 5), dtype=np.float32)  # [N,5]:[bbox,score]
-        for i in range(len(test_data)):
-            bbox = np.asarray(test_data[i]['bbox'])  
-            cls_dets[i, :4] = np.array([bbox[0], bbox[1], bbox[0] + bbox[2], bbox[1] + bbox[3]])
-            cls_dets[i, 4] = np.array(test_data[i]['score'])
+            # nms and filter
+            keep = np.where((cls_dets[:, 4] >= min_scores) &
+                            ((cls_dets[:, 3] - cls_dets[:, 1]) * (cls_dets[:, 2] - cls_dets[:, 0]) >= min_box_size))[0]
+            cls_dets = cls_dets[keep]
+            if len(cls_dets) > 0:
+                if nms_method == 'nms':
+                    keep = gpu_nms(cls_dets, nms_thresh)
+                elif nms_method == 'soft':
+                    keep = cpu_soft_nms(np.ascontiguousarray(cls_dets, dtype=np.float32), method=2)
+                else:
+                    assert False
+            cls_dets = cls_dets[keep]
+            test_data = np.asarray(test_data)[keep]
 
-        # nms and filter
-        keep = np.where((cls_dets[:, 4] >= min_scores) &
-                        ((cls_dets[:, 3] - cls_dets[:, 1]) * (cls_dets[:, 2] - cls_dets[:, 0]) >= min_box_size))[0]
-        cls_dets = cls_dets[keep]
-        if len(cls_dets) > 0:
-            if nms_method == 'nms':
-                keep = gpu_nms(cls_dets, nms_thresh)
-            elif nms_method == 'soft':
-                keep = cpu_soft_nms(np.ascontiguousarray(cls_dets, dtype=np.float32), method=2)
-            else:
-                assert False
-        cls_dets = cls_dets[keep]
-        test_data = np.asarray(test_data)[keep]
+            if len(keep) == 0:
+                continue
 
-        if len(keep) == 0:
-            continue
+            # crop and detect keypoints
+            cls_skeleton = np.zeros((len(test_data), cfg.nr_skeleton, 3)) # 2 instance
+            crops = np.zeros((len(test_data), 4))
+            cfg.batch_size = 32
+            batch_size = cfg.batch_size // 2
+            for test_id in range(0, len(test_data), batch_size):
+                start_id = test_id
+                end_id = min(len(test_data), test_id + batch_size)
 
-        # crop and detect keypoints
-        cls_skeleton = np.zeros((len(test_data), cfg.nr_skeleton, 3)) # 2 instance
-        crops = np.zeros((len(test_data), 4))
-        cfg.batch_size = 32
-        batch_size = cfg.batch_size // 2
-        for test_id in range(0, len(test_data), batch_size):
-            start_id = test_id
-            end_id = min(len(test_data), test_id + batch_size)
+                test_imgs = []
+                details = []
+                for i in range(start_id, end_id):
+                    test_img, detail = Preprocessing(test_data[i], stage='test') #[1,3,256,256]
+                    test_imgs.append(test_img) 
+                    details.append(detail)
 
-            test_imgs = []
-            details = []
-            for i in range(start_id, end_id):
-                test_img, detail = Preprocessing(test_data[i], stage='test') #[1,3,256,256]
-                test_imgs.append(test_img) 
-                details.append(detail)
-
-            details = np.asarray(details)
-            feed = test_imgs
-            for i in range(end_id - start_id):
-                ori_img = test_imgs[i][0].transpose(1, 2, 0) #[256,256,3]
-                # cv2.imwrite('debug/{:04d}.jpg'.format(i),ori_img*255)
-                flip_img = cv2.flip(ori_img, 1)  # 水平翻转
-                feed.append(flip_img.transpose(2, 0, 1)[np.newaxis, ...])
-            feed = np.vstack(feed) # [B,3,256,256]
-
-            res = tester.predict_one([feed.transpose(0, 2, 3, 1).astype(np.float32)])[0]
-            res = res.transpose(0, 3, 1, 2)  # output heatmap :[B,k,h,w]
-
-
-            # original_img=test_imgs[0][0].transpose(1, 2, 0)*255
-            # flip_img=feed.transpose(0, 2, 3, 1)[2]*255
-            # # flip_img = cv2.flip(original_img, 1)
-
-            # cv2.imwrite('./test.jpg',flip_img)
-
-
-            # flip test results:
-            if cfg.flip_test:
+                details = np.asarray(details)
+                feed = test_imgs
                 for i in range(end_id - start_id):
-                    fmp = res[end_id - start_id + i].transpose((1, 2, 0)) # get one prediction [h,w,k]
-                    fmp = cv2.flip(fmp, 1) # 水平翻转heatmap
-                    fmp = list(fmp.transpose((2, 0, 1))) # [k,h,w]
-                    for (q, w) in cfg.symmetry:  # 将对称关节点的heatmap交换
-                        fmp[q], fmp[w] = fmp[w], fmp[q]
-                    fmp = np.array(fmp)
-                    res[i] += fmp
-                    res[i] /= 2   # heatmap均值
+                    ori_img = test_imgs[i][0].transpose(1, 2, 0) #[256,256,3]
+                    # cv2.imwrite('debug/{:04d}.jpg'.format(i),ori_img*255)
+                    flip_img = cv2.flip(ori_img, 1)  # 水平翻转
+                    feed.append(flip_img.transpose(2, 0, 1)[np.newaxis, ...])
+                feed = np.vstack(feed) # [B,3,256,256]
+
+                res = tester.predict_one([feed.transpose(0, 2, 3, 1).astype(np.float32)])[0]
+                res = res.transpose(0, 3, 1, 2)  # output heatmap :[B,k,h,w]
 
 
-            for test_image_id in range(start_id, end_id):
-                original_img=test_imgs[test_image_id - start_id][0].transpose(1, 2, 0)*255
-                
-                r0 = res[test_image_id - start_id].copy()
-                r0 /= 255.
-                r0 += 0.5
-                heatmap_vis(original_img,r0,'./debug/',"{:04d}.jpg".format(test_image_id))
-                # cv2.imwrite('debug/{:04d}.jpg'.format(test_image_id),original_img)
+                # original_img=test_imgs[0][0].transpose(1, 2, 0)*255
+                # flip_img=feed.transpose(0, 2, 3, 1)[2]*255
+                # # flip_img = cv2.flip(original_img, 1)
 
-                for w in range(cfg.nr_skeleton):
-                    res[test_image_id - start_id, w] /= np.amax(res[test_image_id - start_id, w])
-                border = 10
-                dr = np.zeros((cfg.nr_skeleton, cfg.output_shape[0] + 2 * border, cfg.output_shape[1] + 2 * border))
-                dr[:, border:-border, border:-border] = res[test_image_id - start_id][:cfg.nr_skeleton].copy()
-                for w in range(cfg.nr_skeleton):
-                    dr[w] = cv2.GaussianBlur(dr[w], (21, 21), 0)
-                for w in range(cfg.nr_skeleton):
-                    lb = dr[w].argmax()
-                    y, x = np.unravel_index(lb, dr[w].shape)
-                    dr[w, y, x] = 0
-                    lb = dr[w].argmax()
-                    py, px = np.unravel_index(lb, dr[w].shape)
-                    y -= border
-                    x -= border
-                    py -= border + y
-                    px -= border + x
-                    ln = (px ** 2 + py ** 2) ** 0.5
-                    delta = 0.25
-                    if ln > 1e-3:
-                        x += delta * px / ln
-                        y += delta * py / ln
-                    x = max(0, min(x, cfg.output_shape[1] - 1))
-                    y = max(0, min(y, cfg.output_shape[0] - 1))
-                    cls_skeleton[test_image_id, w, :2] = (x * 4 + 2, y * 4 + 2)
-                    cls_skeleton[test_image_id, w, 2] = r0[w, int(round(y) + 1e-10), int(round(x) + 1e-10)]
+                # cv2.imwrite('./test.jpg',flip_img)
 
-                # draw joints.
-                
-                # map back to original images
-                crops[test_image_id, :] = details[test_image_id - start_id, :]
-                for w in range(cfg.nr_skeleton):
-                    cls_skeleton[test_image_id, w, 0] = cls_skeleton[test_image_id, w, 0] / cfg.data_shape[1] * (
-                    crops[test_image_id][2] - crops[test_image_id][0]) + crops[test_image_id][0]
-                    cls_skeleton[test_image_id, w, 1] = cls_skeleton[test_image_id, w, 1] / cfg.data_shape[0] * (
-                    crops[test_image_id][3] - crops[test_image_id][1]) + crops[test_image_id][1]
-        
-        all_res[-1] = [cls_skeleton.copy(), cls_dets.copy()]
 
-        cls_partsco = cls_skeleton[:, :, 2].copy().reshape(-1, cfg.nr_skeleton)
-        cls_skeleton[:, :, 2] = 1
-        cls_scores = cls_dets[:, -1].copy()
+                # flip test results:
+                if cfg.flip_test:
+                    for i in range(end_id - start_id):
+                        fmp = res[end_id - start_id + i].transpose((1, 2, 0)) # get one prediction [h,w,k]
+                        fmp = cv2.flip(fmp, 1) # 水平翻转heatmap
+                        fmp = list(fmp.transpose((2, 0, 1))) # [k,h,w]
+                        for (q, w) in cfg.symmetry:  # 将对称关节点的heatmap交换
+                            fmp[q], fmp[w] = fmp[w], fmp[q]
+                        fmp = np.array(fmp)
+                        res[i] += fmp
+                        res[i] /= 2   # heatmap均值
 
-        # rescore
-        cls_dets[:, -1] = cls_scores * cls_partsco.mean(axis=1)
-        cls_skeleton = np.concatenate(
-            [cls_skeleton.reshape(-1, cfg.nr_skeleton * 3), (cls_scores * cls_partsco.mean(axis=1))[:, np.newaxis]],
-            axis=1)
-        for i in range(len(cls_skeleton)):
-            result = dict(image_id=im_info['image_id'], category_id=1, score=float(round(cls_skeleton[i][-1], 4)),
-                          keypoints=cls_skeleton[i][:-1].round(3).tolist())
-            dump_results.append(result)
+
+                for test_image_id in range(start_id, end_id):
+                    original_img=test_imgs[test_image_id - start_id][0].transpose(1, 2, 0)*255 + cfg.pixel_means
+                    
+                    r0 = res[test_image_id - start_id].copy()
+                    r0 /= 255.
+                    r0 += 0.5
+                    # heatmap_vis(original_img,r0,'./debug/',"{:04d}.jpg".format(test_image_id))
+                    # cv2.imwrite('debug/{:04d}.jpg'.format(test_image_id),original_img)
+
+                    for w in range(cfg.nr_skeleton):
+                        res[test_image_id - start_id, w] /= np.amax(res[test_image_id - start_id, w])
+                    border = 10
+                    dr = np.zeros((cfg.nr_skeleton, cfg.output_shape[0] + 2 * border, cfg.output_shape[1] + 2 * border))
+                    dr[:, border:-border, border:-border] = res[test_image_id - start_id][:cfg.nr_skeleton].copy()
+                    for w in range(cfg.nr_skeleton):
+                        dr[w] = cv2.GaussianBlur(dr[w], (21, 21), 0)
+                    for w in range(cfg.nr_skeleton):
+                        lb = dr[w].argmax()
+                        y, x = np.unravel_index(lb, dr[w].shape)
+                        dr[w, y, x] = 0
+                        lb = dr[w].argmax()
+                        py, px = np.unravel_index(lb, dr[w].shape)
+                        y -= border
+                        x -= border
+                        py -= border + y
+                        px -= border + x
+                        ln = (px ** 2 + py ** 2) ** 0.5
+                        delta = 0.25
+                        if ln > 1e-3:
+                            x += delta * px / ln
+                            y += delta * py / ln
+                        x = max(0, min(x, cfg.output_shape[1] - 1))
+                        y = max(0, min(y, cfg.output_shape[0] - 1))
+                        cls_skeleton[test_image_id, w, :2] = (x * 4 + 2, y * 4 + 2)
+                        cls_skeleton[test_image_id, w, 2] = r0[w, int(round(y) + 1e-10), int(round(x) + 1e-10)]
+                    
+                    # print(cls_skeleton[test_image_id].shape)
+                    # vis_img=vis_keypoints(original_img,cls_skeleton[test_image_id])
+                    if cfg.test_vis:
+                        image = np.ascontiguousarray(original_img, dtype=np.uint8) 
+                        vis_img=vis_keypoints(image,cls_skeleton[test_image_id])
+                        cv2.imwrite('debug/{:04d}.jpg'.format(test_image_id),vis_img)
+                    
+
+
+                    # draw joints.
+                    
+                    # map back to original images
+                    crops[test_image_id, :] = details[test_image_id - start_id, :]
+                    for w in range(cfg.nr_skeleton):
+                        cls_skeleton[test_image_id, w, 0] = cls_skeleton[test_image_id, w, 0] / cfg.data_shape[1] * (
+                        crops[test_image_id][2] - crops[test_image_id][0]) + crops[test_image_id][0]
+                        cls_skeleton[test_image_id, w, 1] = cls_skeleton[test_image_id, w, 1] / cfg.data_shape[0] * (
+                        crops[test_image_id][3] - crops[test_image_id][1]) + crops[test_image_id][1]
+            
+            all_res[-1] = [cls_skeleton.copy(), cls_dets.copy()]
+
+            cls_partsco = cls_skeleton[:, :, 2].copy().reshape(-1, cfg.nr_skeleton)
+            cls_skeleton[:, :, 2] = 1
+            cls_scores = cls_dets[:, -1].copy()
+
+            # rescore
+            cls_dets[:, -1] = cls_scores * cls_partsco.mean(axis=1)
+            cls_skeleton = np.concatenate(
+                [cls_skeleton.reshape(-1, cfg.nr_skeleton * 3), (cls_scores * cls_partsco.mean(axis=1))[:, np.newaxis]],
+                axis=1)
+            for i in range(len(cls_skeleton)):
+                result = dict(image_id=im_info['image_id'], category_id=1, score=float(round(cls_skeleton[i][-1], 4)),
+                            keypoints=cls_skeleton[i][:-1].round(3).tolist())
+                dump_results.append(result)
+            pbar.update()
 
     return all_res, dump_results
 

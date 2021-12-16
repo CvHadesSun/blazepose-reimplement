@@ -76,10 +76,11 @@ def create_refine_net(blocks, is_training, trainable=True):
 
 class Network(ModelDesc):
     def make_data(self):
-        from COCOAllJoints import COCOJoints
-        from dataset import Preprocessing
+        # from COCOAllJoints import COCOJoints
+        from MOMOAllJoints import MOMOJoints
+        from dataset import PreprocessingV2 as Preprocessing
 
-        d = COCOJoints()
+        d = MOMOJoints()
         train_data, _ = d.load_data(cfg.min_kps)
 
         from tfflat.data_provider import DataFromList, MultiProcessMapDataZMQ, BatchData, MapData

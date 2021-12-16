@@ -6,6 +6,8 @@ import random
 import time
 
 
+from utils.affine_transform import adjust_bbox, get_rotation, get_transform_matrix, affine_joints
+
 def get_seg(height, width, seg_ann):
     label = np.zeros((height, width, 1))
     if type(seg_ann) == list:
@@ -43,6 +45,12 @@ def data_augmentation(trainData, trainLabel, trainValids, segms=None):
         height, width = ori_img.shape[0], ori_img.shape[1]
         center = (width / 2., height / 2.)
         n = cfg.nr_skeleton
+        # if cfg.nr_skeleton>17:
+        #     n -=2
+
+    
+
+        
 
         # affrat = random.uniform(0.75, 1.25)
         affrat = random.uniform(0.7, 1.35)
@@ -132,6 +140,9 @@ def data_augmentation(trainData, trainLabel, trainValids, segms=None):
 
 def joints_heatmap_gen(data, label, tar_size=cfg.output_shape, ori_size=cfg.data_shape, points=cfg.nr_skeleton,
                        return_valid=False, gaussian_kernel=cfg.gaussain_kernel):
+
+    # if points>17:
+    #     points -=2
     if return_valid:
         valid = np.ones((len(data), points), dtype=np.float32)
     ret = np.zeros((len(data), points, tar_size[0], tar_size[1]), dtype='float32')
@@ -143,11 +154,12 @@ def joints_heatmap_gen(data, label, tar_size=cfg.output_shape, ori_size=cfg.data
             label[i][j << 1] = min(label[i][j << 1], ori_size[1] - 1)
             ret[i][j][int(label[i][j << 1 | 1] * tar_size[0] / ori_size[0])][
                 int(label[i][j << 1] * tar_size[1] / ori_size[1])] = 1
+
     for i in range(len(ret)):
         for j in range(points):
             ret[i, j] = cv2.GaussianBlur(ret[i, j], gaussian_kernel, 0)
     for i in range(len(ret)):
-        for j in range(cfg.nr_skeleton):
+        for j in range(points):
             am = np.amax(ret[i][j])
             if am <= 1e-8:
                 if return_valid:
@@ -173,6 +185,7 @@ def Preprocessing(d, stage='train'):
 
     vis = False
     img = cv2.imread(os.path.join(cfg.img_path, d['imgpath']))
+    # print(img.shape)
     #hack(multiprocessing data provider)
     while img is None:
         print('read none image')
@@ -181,6 +194,8 @@ def Preprocessing(d, stage='train'):
     add = max(img.shape[0], img.shape[1])
     bimg = cv2.copyMakeBorder(img, add, add, add, add, borderType=cv2.BORDER_CONSTANT,
                               value=cfg.pixel_means.reshape(-1))
+
+    
 
     bbox = np.array(d['bbox']).reshape(4, ).astype(np.float32)
     bbox[:2] += add
@@ -255,7 +270,7 @@ def Preprocessing(d, stage='train'):
     #     print(ori_img.shape,d['imgpath'])
     #     print('-'*50)
         
-    # img = img - cfg.pixel_means
+    img = img - cfg.pixel_means
 
     if cfg.pixel_norm:
         img = img / 255.
@@ -284,3 +299,109 @@ def Preprocessing(d, stage='train'):
                 valids.astype(np.float32)]
     else:
         return [np.asarray(imgs).astype(np.float32), details]
+
+
+def PreprocessingV2(d, stage='train'):
+    height, width = cfg.data_shape
+    imgs = []
+    labels = []
+    valids = []
+    if cfg.use_seg:
+        segms = []
+
+    # vis = False
+    img = cv2.imread(os.path.join(cfg.img_path, d['imgpath']))
+    # print(img.shape)
+    #hack(multiprocessing data provider)
+    while img is None:
+        print('read none image')
+        time.sleep(np.random.rand() * 5)
+        img = cv2.imread(os.path.join(cfg.img_path, d['imgpath']))
+
+    bbox = np.array(d['bbox']).reshape(4, ).astype(np.float32) # get bbox
+    scale = np.array([1, 1]) * 1.25
+    rotation = 0
+
+    if stage == 'train':
+        joints = np.array(d['joints']).reshape(-1, 5).astype(np.float32) # get the [N,5] joints
+        scale = scale * np.clip(np.random.randn() * cfg.scale_factor + 1, 1 - cfg.scale_factor,
+                                1 + cfg.scale_factor)
+        if cfg.rotate:
+            rotation = get_rotation(joints[-2, :2], joints[-1, :2]) # rotate the object.
+        ad_bbox = adjust_bbox(bbox, rotation, scales=scale) # adjust bbox
+        trans = get_transform_matrix(ad_bbox, rotation, [cfg.data_shape[0], cfg.data_shape[1]]) #get the affine transform matrix [3x3]
+        image = cv2.warpPerspective(img, trans, (cfg.data_shape[1], cfg.data_shape[0]),
+                                         flags=cv2.INTER_LINEAR)
+        # can add segmentation in here.
+        _valid = np.array(d['valid']).reshape(-1).astype(np.float32)
+        new_joints, valid = affine_joints(joints, _valid, trans, [cfg.data_shape[0], cfg.data_shape[1]])
+
+    else:
+        joints = np.array(d['joints']).reshape(-1, 5).astype(np.float32) # get the [N,5] joints
+        if cfg.rotate:
+            rotation = get_rotation(joints[-2, :2], joints[-1, :2]) # rotate the object.
+        ad_bbox = adjust_bbox(bbox, rotation, scales=scale) # adjust bbox
+        trans = get_transform_matrix(ad_bbox, rotation, [cfg.data_shape[0], cfg.data_shape[1]])
+        image = cv2.warpPerspective(img, trans, (cfg.data_shape[1], cfg.data_shape[0]),
+                                         flags=cv2.INTER_LINEAR)
+        
+
+    # if stage != 'train':
+    #     details = np.asarray([0,0,0,0])
+
+    # if cfg.use_seg is True and 'segmentation' in d:
+    #     seg = get_seg(ori_img.shape[0], ori_img.shape[1], d['segmentation'])
+    #     add = max(seg.shape[0], seg.shape[1])
+    #     bimg = cv2.copyMakeBorder(seg, add, add, add, add, borderType=cv2.BORDER_CONSTANT, value=(0, 0, 0))
+    #     seg = cv2.resize(bimg[min_y:max_y, min_x:max_x], (width, height))
+    #     segms.append(seg)
+
+    label=new_joints[:-2,:2].copy()  # not contains last two joints.
+    valid=valid.reshape(-1)[:-2].copy()
+
+    if cfg.debug_vis:
+        tmpimg = image.copy()
+        img_name=d['imgpath'].split('/')[-1]
+        from utils.visualize import draw_skeleton
+        draw_skeleton(tmpimg, label.astype(int))
+        # print(os.path.join(cfg.debug_dir,img_name))
+        cv2.imwrite(os.path.join(cfg.debug_dir,img_name), tmpimg)
+        # print(os.path.join(cfg.debug_dir,img_name))
+        # from IPython import embed; embed()
+
+    # duplicate input img to debug visualization
+    # if cfg.debug_vis:
+    #     ori_img=img.copy()
+    #     print(ori_img.shape,d['imgpath'])
+    #     print('-'*50)
+        
+    img = image - cfg.pixel_means
+
+    if cfg.pixel_norm:
+        img = img / 255.
+    img = img.transpose(2, 0, 1)   # [3,256,256]
+    imgs.append(img)
+    if 'joints' in d:
+        labels.append(label.reshape(-1))
+        valids.append(valid.reshape(-1))
+
+    if stage == 'train':
+        imgs, labels, valids = data_augmentation(imgs, labels, valids)
+        heatmaps15 = joints_heatmap_gen(imgs, labels, cfg.output_shape, cfg.data_shape, return_valid=False,
+                                        gaussian_kernel=cfg.gk15)
+        heatmaps11 = joints_heatmap_gen(imgs, labels, cfg.output_shape, cfg.data_shape, return_valid=False,
+                                        gaussian_kernel=cfg.gk11)
+        heatmaps9 = joints_heatmap_gen(imgs, labels, cfg.output_shape, cfg.data_shape, return_valid=False,
+                                       gaussian_kernel=cfg.gk9)
+        heatmaps7 = joints_heatmap_gen(imgs, labels, cfg.output_shape, cfg.data_shape, return_valid=False,
+                                       gaussian_kernel=cfg.gk7)
+
+        return [imgs.astype(np.float32).transpose(0, 2, 3, 1),
+                heatmaps15.astype(np.float32).transpose(0, 2, 3, 1),
+                heatmaps11.astype(np.float32).transpose(0, 2, 3, 1),
+                heatmaps9.astype(np.float32).transpose(0, 2, 3, 1),
+                heatmaps7.astype(np.float32).transpose(0, 2, 3, 1),
+                valids.astype(np.float32)]
+    else:
+        # return [np.asarray(imgs).astype(np.float32), details]
+        return np.asarray(imgs).astype(np.float32)

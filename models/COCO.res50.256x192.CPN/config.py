@@ -6,7 +6,7 @@ import sys
 import numpy as np
 
 class Config:
-    username = 'square_bbox_heatmap255'
+    username = 'blazepose_affine_bbox'
 
     cur_dir = os.path.dirname(os.path.abspath(__file__))
     this_dir_name = cur_dir.split('/')[-1]
@@ -44,9 +44,11 @@ class Config:
 
     flip_test=False
 
-
     # add 
     debug_vis=False
+    test_vis=False
+    scale_factor=0.3
+    rotate=False  
 
     def get_lr(self, itr):
         lr = self.lr * self.lr_gamma ** (itr // self.step_size)
