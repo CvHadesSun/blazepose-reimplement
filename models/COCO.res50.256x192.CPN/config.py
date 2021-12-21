@@ -46,7 +46,7 @@ class Config:
 
     # add 
     debug_vis=False
-    test_vis=False
+    test_vis=True
     scale_factor=0.3
     rotate=False  
 

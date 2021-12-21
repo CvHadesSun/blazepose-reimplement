@@ -219,6 +219,7 @@ def test_net(tester, logger, dets, det_range):
                     # vis_img=vis_keypoints(original_img,cls_skeleton[test_image_id])
                     if cfg.test_vis:
                         image = np.ascontiguousarray(original_img, dtype=np.uint8) 
+                        print(image.shape)
                         vis_img=vis_keypoints(image,cls_skeleton[test_image_id])
                         cv2.imwrite('debug/{:04d}.jpg'.format(test_image_id),vis_img)
                     

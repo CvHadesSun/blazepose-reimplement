@@ -98,10 +98,11 @@ class MOMOJoints(object):
                     if not flag:
                         continue
                     bbox = ann['bbox']
+                    pose_3d = pose_3d.reshape(-1).tolist()
                     # if np.sum(joints[2::3]) == 0 or ann['num_keypoints'] == 0 :
                     #     continue
                     imgname=prefix + '2017/' +coco.imgs[ann['image_id']]['file_name']   
-                    humanData = dict(imgid = ann['image_id'],imgpath = imgname,bbox=bbox)
+                    humanData = dict(imgid = ann['image_id'],imgpath = imgname,bbox=bbox,joints=pose_3d)
                     mpi.append(humanData)                  
             else:
                 print('COCO data error, please check')

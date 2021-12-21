@@ -159,17 +159,18 @@ def landmarkProjection(norm_landmark, bbox,rot):
 
     x1,y1,width,height=bbox
 
+    # print(x1,y1,width,height)
     cneter_x = x1+width/2
-    cneter_y = x1+height/2
+    cneter_y = y1+height/2
 
-    x, y = norm_landmark # [N,2] normalization joints coordinates
-
+    x = norm_landmark[:,0] # [N,2] normalization joints coordinates
+    y = norm_landmark[:,1] 
     # rotate x and y coord.
     new_x = math.cos(angle_) * (x - 0.5) - math.sin(angle_) * (y - 0.5)
     new_y = math.sin(angle_) * (x - 0.5) + math.cos(angle_) * (y - 0.5)
 
     new_x = new_x * width + cneter_x
-    new_y = new_y * height + cneter_x
+    new_y = new_y * height + cneter_y
 
     ori_landmark[:,0] = new_x
     ori_landmark[:,1] = new_y

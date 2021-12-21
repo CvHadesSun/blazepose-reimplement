@@ -39,4 +39,8 @@
   
   - [ ] 按照blazepose旋转方式对齐
     - [ ] No rotation ，没有最后两个关节点
+    
+    
+    
+    - [ ] COCO数据集过滤or后处理
 

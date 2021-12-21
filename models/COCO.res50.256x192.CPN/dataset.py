@@ -311,6 +311,7 @@ def PreprocessingV2(d, stage='train'):
 
     # vis = False
     img = cv2.imread(os.path.join(cfg.img_path, d['imgpath']))
+    ori_img=img.copy()
     # print(img.shape)
     #hack(multiprocessing data provider)
     while img is None:
@@ -333,6 +334,7 @@ def PreprocessingV2(d, stage='train'):
         image = cv2.warpPerspective(img, trans, (cfg.data_shape[1], cfg.data_shape[0]),
                                          flags=cv2.INTER_LINEAR)
         # can add segmentation in here.
+        #
         _valid = np.array(d['valid']).reshape(-1).astype(np.float32)
         new_joints, valid = affine_joints(joints, _valid, trans, [cfg.data_shape[0], cfg.data_shape[1]])
 
@@ -345,6 +347,12 @@ def PreprocessingV2(d, stage='train'):
         image = cv2.warpPerspective(img, trans, (cfg.data_shape[1], cfg.data_shape[0]),
                                          flags=cv2.INTER_LINEAR)
         
+        # _valid = np.array(d['valid']).reshape(-1).astype(np.float32)
+        # new_joints, valid = affine_joints(joints, _valid, trans, [cfg.data_shape[0], cfg.data_shape[1]])
+        roi=np.zeros(5)
+        roi[:-1]=ad_bbox
+        roi[-1]=rotation
+        
 
     # if stage != 'train':
     #     details = np.asarray([0,0,0,0])
@@ -355,25 +363,20 @@ def PreprocessingV2(d, stage='train'):
     #     bimg = cv2.copyMakeBorder(seg, add, add, add, add, borderType=cv2.BORDER_CONSTANT, value=(0, 0, 0))
     #     seg = cv2.resize(bimg[min_y:max_y, min_x:max_x], (width, height))
     #     segms.append(seg)
+    if stage == 'train':
+        label=new_joints[:-2,:2].copy()  # not contains last two joints.
+        valid=valid.reshape(-1)[:-2].copy()
 
-    label=new_joints[:-2,:2].copy()  # not contains last two joints.
-    valid=valid.reshape(-1)[:-2].copy()
+        if cfg.debug_vis:
+            tmpimg = image.copy()
+            img_name=d['imgpath'].split('/')[-1]
+            from utils.visualize import draw_skeleton
+            draw_skeleton(tmpimg, label.astype(int))
+            # print(os.path.join(cfg.debug_dir,img_name))
+            cv2.imwrite(os.path.join(cfg.debug_dir,img_name), tmpimg)
+            # print(os.path.join(cfg.debug_dir,img_name))
+            # from IPython import embed; embed()
 
-    if cfg.debug_vis:
-        tmpimg = image.copy()
-        img_name=d['imgpath'].split('/')[-1]
-        from utils.visualize import draw_skeleton
-        draw_skeleton(tmpimg, label.astype(int))
-        # print(os.path.join(cfg.debug_dir,img_name))
-        cv2.imwrite(os.path.join(cfg.debug_dir,img_name), tmpimg)
-        # print(os.path.join(cfg.debug_dir,img_name))
-        # from IPython import embed; embed()
-
-    # duplicate input img to debug visualization
-    # if cfg.debug_vis:
-    #     ori_img=img.copy()
-    #     print(ori_img.shape,d['imgpath'])
-    #     print('-'*50)
         
     img = image - cfg.pixel_means
 
@@ -381,9 +384,10 @@ def PreprocessingV2(d, stage='train'):
         img = img / 255.
     img = img.transpose(2, 0, 1)   # [3,256,256]
     imgs.append(img)
-    if 'joints' in d:
-        labels.append(label.reshape(-1))
-        valids.append(valid.reshape(-1))
+    if stage == 'train':
+        if 'joints' in d:
+            labels.append(label.reshape(-1))
+            valids.append(valid.reshape(-1))
 
     if stage == 'train':
         imgs, labels, valids = data_augmentation(imgs, labels, valids)
@@ -404,4 +408,4 @@ def PreprocessingV2(d, stage='train'):
                 valids.astype(np.float32)]
     else:
         # return [np.asarray(imgs).astype(np.float32), details]
-        return np.asarray(imgs).astype(np.float32)
+        return [np.asarray(imgs).astype(np.float32),ori_img,roi,d['imgpath']]
