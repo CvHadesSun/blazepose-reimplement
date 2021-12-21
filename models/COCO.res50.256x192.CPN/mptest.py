@@ -141,8 +141,10 @@ def test_net(tester, logger, dets, det_range):
 
                 test_imgs = []
                 details = []
+                ori_imgs=[]
                 for i in range(start_id, end_id):
-                    test_img, detail = Preprocessing(test_data[i], stage='test') #[1,3,256,256]
+                    test_img, detail,ori_img = Preprocessing(test_data[i], stage='test') #[1,3,256,256]
+                    ori_imgs.append(ori_img)
                     test_imgs.append(test_img) 
                     details.append(detail)
 
@@ -180,7 +182,8 @@ def test_net(tester, logger, dets, det_range):
 
 
                 for test_image_id in range(start_id, end_id):
-                    original_img=test_imgs[test_image_id - start_id][0].transpose(1, 2, 0)*255 + cfg.pixel_means
+                    # original_img=test_imgs[test_image_id - start_id][0].transpose(1, 2, 0)*255 + cfg.pixel_means
+                    ori_img=ori_imgs[test_image_id - start_id]
                     
                     r0 = res[test_image_id - start_id].copy()
                     r0 /= 255.
@@ -217,12 +220,7 @@ def test_net(tester, logger, dets, det_range):
                     
                     # print(cls_skeleton[test_image_id].shape)
                     # vis_img=vis_keypoints(original_img,cls_skeleton[test_image_id])
-                    if cfg.test_vis:
-                        image = np.ascontiguousarray(original_img, dtype=np.uint8) 
-                        print(image.shape)
-                        vis_img=vis_keypoints(image,cls_skeleton[test_image_id])
-                        cv2.imwrite('debug/{:04d}.jpg'.format(test_image_id),vis_img)
-                    
+                   
 
 
                     # draw joints.
@@ -234,7 +232,15 @@ def test_net(tester, logger, dets, det_range):
                         crops[test_image_id][2] - crops[test_image_id][0]) + crops[test_image_id][0]
                         cls_skeleton[test_image_id, w, 1] = cls_skeleton[test_image_id, w, 1] / cfg.data_shape[0] * (
                         crops[test_image_id][3] - crops[test_image_id][1]) + crops[test_image_id][1]
-            
+                        
+                    if cfg.test_vis:
+                        # image = np.ascontiguousarray(original_img, dtype=np.uint8) 
+                        # print(image.shape)
+                        vis_img=ori_img.copy()
+                        for test_image_id in range(cls_skeleton.shape[0]):
+                            vis_img=vis_keypoints(vis_img,cls_skeleton[test_image_id])
+                        cv2.imwrite('debug/{}.jpg'.format(im_info['imgpath'].replace('/','_')),vis_img)
+                    
             all_res[-1] = [cls_skeleton.copy(), cls_dets.copy()]
 
             cls_partsco = cls_skeleton[:, :, 2].copy().reshape(-1, cfg.nr_skeleton)

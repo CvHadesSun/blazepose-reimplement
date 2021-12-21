@@ -48,6 +48,9 @@ def get_encode_pts(joints, scale=[1.25, 1.25]):
                      [head_x, head_y, 1., 1.]],dtype=np.float32),True
 
 
+def get_zeros_encode():
+    return np.array([[0, 0, 0., 0.],
+                     [0, 0, 0., 0.]],dtype=np.float32),True
 def compute_pose_flag(joints):
     # TODO: using joints
     # design the number of visible joints to pose confidence.
@@ -89,7 +92,8 @@ def get_visiblity_confidence(joints):
 def coco_to_balzepose(joints, scale):
     # TODO: convert the coco format joints to defined blaze pose joints format.
     # 1. get the encode points
-    aux_pts,flag = get_encode_pts(joints, scale)  # [2, 4]
+    # aux_pts,flag = get_encode_pts(joints, scale)  # [2, 4]
+    aux_pts,flag = get_zeros_encode()
     if flag:
         # 2.compute the vis and conf label info.
         new_joints = get_visiblity_confidence(joints)  # [N,4]

@@ -30,35 +30,6 @@ from vis import vis_keypoints
 from utils.pprint_debug import print_debug
 from utils.affine_transform import landmarkProjection
 
-# def BlendHeatmap(img,heatmaps,joint_num):
-#     '''data:original photo
-#     heatmaps: heatmap of all 19 joints(channels),Array shape(128,228,19)
-#     joint_num:heatmap of which joint(channel)to visualize'''
-    
-#     h_heatmap,w_heatmap,d_heatmap=heatmaps.shape
-    
-#     heatmap=heatmaps[:, :, joint_num]
-#     #resize
-#     scaled_img = cv2.resize(img, (w_heatmap, h_heatmap), interpolation=cv2.INTER_CUBIC)
-#     #blend resized image and heatmap
-#     plt.imshow(scaled_img,alpha=1)
-#     plt.imshow(heatmap,alpha=0.65)
-#     #add colorbar of the heatmap
-#     plt.colorbar(fraction=0.04,pad=0.03)
-
-# def heatmap_vis(img_f13,heatmaps_f13,size=[512,512]):
-
-#     heatmaps_f13=heatmaps_f13.resize(size)
-#     h_heatmap,w_heatmap,d_heatmap=heatmaps_f13.shape
-#     scaled_img = cv2.resize(img_f13, (w_heatmap, h_heatmap), interpolation=cv2.INTER_CUBIC)
-#     # plt.imshow(scaled_img,alpha=1)
-#     for i in range(0,19): 
-#         heatmap=heatmaps_f13[:, :, i]
-#         # plt.imshow(heatmap,alpha=0.05)
-#         x,y,c=FindJoint(heatmaps_f13,i)
-#         plt.plot(x,y,'r.',alpha=0.6)
-#     plt.savefig("Sitting 1_55011271_f13_19joints.png",dpi=300,bbox_inches='tight') 
-
 
 def heatmap_vis(img,heatmap,output_dir,name,target_size=[512,512]):
 
@@ -94,10 +65,11 @@ def test_net(tester, logger, dets, det_range):
     img_start = det_range[0]
 
     
-    with tqdm.tqdm(total=det_range[1], position=0, leave=True) as pbar:
+    with tqdm.tqdm(total=(det_range[1]-det_range[0]), position=0, leave=True) as pbar:
         while img_start < det_range[1]:
             img_end = img_start + 1
             im_info = dets[img_start]
+            # print('im_info',im_info.keys())
             while img_end < det_range[1] and dets[img_end]['image_id'] == im_info['image_id']:  # some different instance of one image
                 img_end += 1
 
@@ -238,10 +210,7 @@ def test_net(tester, logger, dets, det_range):
                         for test_image_id in range(cls_skeleton.shape[0]):
                             vis_img=vis_keypoints(vis_img,cls_skeleton[test_image_id])
                         # vis_img=cv2.rectangle(vis_img,(roi[0],roi[1]),(roi[0]+roi[2],roi[1]+roi[3]),(0,255,0,),2)
-                        cv2.imwrite('debug/{}'.format(img_name.replace('/','_')),vis_img)
-
-                    # draw joints.
-                    
+                        cv2.imwrite('debug/{}'.format(img_name.replace('/','_')),vis_img)    
                     # map back to original images
                     # crops[test_image_id, :] = details[test_image_id - start_id, :]
                     # for w in range(cfg.nr_skeleton):
@@ -273,24 +242,6 @@ def test_net(tester, logger, dets, det_range):
 def test(test_model, logger):
     eval_gt = COCO(cfg.gt_path)
     import json
-    # with open(cfg.det_path, 'r') as f:
-    #     dets = json.load(f)
-
-    # test_subset = False
-    # if test_subset:
-    #     eval_gt.imgs = dict(list(eval_gt.imgs.items())[:100])
-    #     anns = dict()
-    #     for i in eval_gt.imgs:
-    #         for j in eval_gt.getAnnIds(i):
-    #             anns[j] = eval_gt.anns[j]
-    #     eval_gt.anns = anns
-    # dets = [i for i in dets if i['image_id'] in eval_gt.imgs]
-
-    # dets = [i for i in dets if i['category_id'] == 1]
-    # dets.sort(key=lambda x: (x['image_id'], x['score']), reverse=True)
-    # for i in dets:
-    #     i['imgpath'] = 'val2014/COCO_val2014_000000%06d.jpg' % i['image_id']
-    # img_num = len(np.unique([i['image_id'] for i in dets]))
 
     use_gtboxes = True
     if use_gtboxes:

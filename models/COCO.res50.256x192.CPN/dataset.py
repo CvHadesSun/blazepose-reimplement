@@ -185,6 +185,7 @@ def Preprocessing(d, stage='train'):
 
     vis = False
     img = cv2.imread(os.path.join(cfg.img_path, d['imgpath']))
+    ori_img=img.copy()
     # print(img.shape)
     #hack(multiprocessing data provider)
     while img is None:
@@ -298,11 +299,11 @@ def Preprocessing(d, stage='train'):
                 heatmaps7.astype(np.float32).transpose(0, 2, 3, 1),
                 valids.astype(np.float32)]
     else:
-        return [np.asarray(imgs).astype(np.float32), details]
+        return [np.asarray(imgs).astype(np.float32), details,ori_img]
 
 
 def PreprocessingV2(d, stage='train'):
-    height, width = cfg.data_shape
+    height, width = cfg.data_shape  
     imgs = []
     labels = []
     valids = []

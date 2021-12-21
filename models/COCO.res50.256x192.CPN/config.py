@@ -6,7 +6,7 @@ import sys
 import numpy as np
 
 class Config:
-    username = 'blazepose_affine_bbox'
+    username = 'blazepose_affine_bbox_all_coco'
 
     cur_dir = os.path.dirname(os.path.abspath(__file__))
     this_dir_name = cur_dir.split('/')[-1]
@@ -46,7 +46,7 @@ class Config:
 
     # add 
     debug_vis=False
-    test_vis=True
+    test_vis=False
     scale_factor=0.3
     rotate=False  
 
@@ -90,7 +90,7 @@ class Config:
     gk7 = (7, 7)
 
     # gt_path = osp.join(root_dir, 'data', 'COCO', 'MSCOCO', 'annotations', 'person_keypoints_minival2014.json')
-    gt_path=os.path.join('/workdir/swh/dataset/coco/annotations','person_keypoints_val2017.json')
+    gt_path=os.path.join('/workdir/swh/dataset/coco/annotations','person_keypoints_val2017_filtered.json')
     det_path = osp.join(root_dir, 'data', 'COCO', 'dets', 'person_detection_minival411_human553.json')
 
 cfg = Config()
